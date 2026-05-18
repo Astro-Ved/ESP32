@@ -1,2 +1,4 @@
 pio_env/
 .pio/
+build/
+CrowpanelTV/build/
