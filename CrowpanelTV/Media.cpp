@@ -25,7 +25,8 @@ void playRGB(const char *filename) {
     uint16_t h = tft.height() - 30;
     xSemaphoreGive(tftMutex);
 
-    uint16_t *buf = (uint16_t*)malloc(w * 10 * 2); // 10 lines buffer
+    // Explicitly allocate in internal SRAM
+    uint16_t *buf = (uint16_t*)heap_caps_malloc(w * 10 * 2, MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL);
 
     if (buf) {
         xSemaphoreTake(tftMutex, portMAX_DELAY);
@@ -38,7 +39,7 @@ void playRGB(const char *filename) {
             tft.pushColors(buf, w * 10, true);
             xSemaphoreGive(tftMutex);
         }
-        free(buf);
+        free(buf); // heap_caps_free is not strictly needed for standard free, but good practice
     }
     f.close();
 }
@@ -47,8 +48,10 @@ void playMJPEG(const char *filename) {
     File f = SD.open(filename, FILE_READ);
     if (!f) return;
 
-    uint8_t *buf = (uint8_t*)malloc(1024 * 30); // 30KB frame buffer assumption
+    // Explicitly allocate in internal SRAM, reduced to 25KB to be safer for internal SRAM constraints
+    uint8_t *buf = (uint8_t*)heap_caps_malloc(1024 * 25, MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL);
     if (!buf) {
+        Serial.println("Failed to allocate MJPEG buffer in SRAM");
         f.close();
         return;
     }
@@ -93,8 +96,8 @@ void playMJPEG(const char *filename) {
 
                     inFrame = false;
                 }
-                // Protect buffer overflow
-                if (frameSize >= 1024 * 30) inFrame = false;
+                // Protect buffer overflow against new SRAM allocation size
+                if (frameSize >= 1024 * 25) inFrame = false;
             }
             prevByte = b;
         }
@@ -105,9 +108,18 @@ void playMJPEG(const char *filename) {
 }
 
 void initMedia() {
-    vspi.begin(currentPinConfig.sd_sclk, currentPinConfig.sd_miso, currentPinConfig.sd_mosi, currentPinConfig.sd_cs);
+    // Enable pullup on MISO to prevent floating pin issues
+    pinMode(currentPinConfig.sd_miso, INPUT_PULLUP);
 
-    if (!SD.begin(currentPinConfig.sd_cs, vspi)) {
+    // Explicitly manage CS pin
+    pinMode(currentPinConfig.sd_cs, OUTPUT);
+    digitalWrite(currentPinConfig.sd_cs, HIGH);
+
+    // Pass -1 to CS in vspi.begin so the hardware block doesn't hijack it.
+    vspi.begin(currentPinConfig.sd_sclk, currentPinConfig.sd_miso, currentPinConfig.sd_mosi, -1);
+
+    // Begin SD with a safe initial frequency (e.g., 4MHz)
+    if (!SD.begin(currentPinConfig.sd_cs, vspi, 4000000)) {
         Serial.println("Card Mount Failed");
         return;
     }

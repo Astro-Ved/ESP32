@@ -12,7 +12,10 @@ void GUI_Task(void *pvParameters);
 void setup() {
     Serial.begin(115200);
 
-    // Manually turn on Backlight
+    // Initialize TFT Mutex before any tasks start
+    tftMutex = xSemaphoreCreateMutex();
+
+    // Forcefully turn on Backlight as requested
     pinMode(27, OUTPUT);
     digitalWrite(27, HIGH);
 
