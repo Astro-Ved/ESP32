@@ -2,3 +2,9 @@ pio_env/
 .pio/
 build/
 CrowpanelTV/build/
+nes_emulator/main/
+bin/
+CrowOS/build/
+SampleApp/build/
+nes_emulator/build/
+nes_emulator/main/

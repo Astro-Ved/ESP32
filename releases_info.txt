@@ -1,0 +1,10 @@
+The fully compiled binary files for the ESP-IDF based modular OS (CrowOS) are located in the `/app/bin/` directory.
+
+- `crow_os.bin`: The main OS Launcher (flash to `0x190000`).
+- `sample_app.bin`: A sample app that demonstrates returning to the OS launcher.
+- `nes_emulator.bin`: The community-made NES emulator module.
+
+To flash the initial OS to your board (assuming a 4MB flash layout with partitions matching partitions.csv):
+esptool.py --chip esp32 write_flash 0x190000 /app/bin/crow_os.bin
+
+You can load the other apps by copying them to an SD card (e.g. `/sdcard/sample_app.bin`) and typing `load sample_app.bin` into the CrowOS serial monitor.
