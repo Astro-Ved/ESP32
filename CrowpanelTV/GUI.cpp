@@ -1,5 +1,6 @@
 #include "GUI.h"
 #include <WiFi.h>
+#include <SD.h>
 
 TFT_eSPI tft = TFT_eSPI();
 Tab currentTab = TAB_MEDIA;
@@ -7,6 +8,13 @@ SemaphoreHandle_t tftMutex;
 bool redrawContent = true;
 bool wifiScanning = false;
 unsigned long lastWifiUpdate = 0;
+
+String selectedFile = "";
+const int MAX_FILES = 10;
+String fileList[MAX_FILES];
+int fileCount = 0;
+int selectedIndex = -1;
+bool fileListLoaded = false; // Cache optimization
 
 // Tab positions
 const int tabWidth = 80;
@@ -72,12 +80,51 @@ void drawTabContent() {
 void drawMediaTab() {
     xSemaphoreTake(tftMutex, portMAX_DELAY);
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    tft.setCursor(10, tabHeight + 20);
+    tft.setCursor(10, tabHeight + 10);
     tft.println("Media Player");
-    tft.setCursor(10, tabHeight + 40);
-    tft.println("Select a file from SD");
+
+    // Load file list from SD only once
+    if (!fileListLoaded) {
+        fileCount = 0;
+        File root = SD.open("/");
+        if (root) {
+            File file = root.openNextFile();
+            while (file && fileCount < MAX_FILES) {
+                if (!file.isDirectory()) {
+                    String name = file.name();
+                    if (name.endsWith(".wav") || name.endsWith(".WAV")) {
+                        fileList[fileCount++] = "/" + name;
+                    }
+                }
+                file = root.openNextFile();
+            }
+        }
+        fileListLoaded = true;
+    }
+
+    if (fileCount == 0) {
+        tft.setCursor(10, tabHeight + 40);
+        tft.println("No .wav files found on SD");
+    } else {
+        for (int i = 0; i < fileCount; i++) {
+            if (i == selectedIndex) {
+                tft.setTextColor(TFT_BLACK, TFT_WHITE);
+            } else {
+                tft.setTextColor(TFT_WHITE, TFT_BLACK);
+            }
+            tft.setCursor(10, tabHeight + 40 + (i * 20));
+            tft.println(fileList[i]);
+        }
+    }
+
+    if (selectedIndex >= 0 && selectedIndex < fileCount) {
+        tft.setTextColor(TFT_GREEN, TFT_BLACK);
+        tft.setCursor(10, tft.height() - 20);
+        tft.print("Playing: ");
+        tft.println(fileList[selectedIndex]);
+    }
+
     xSemaphoreGive(tftMutex);
-    // Placeholder for actual file listing
 }
 
 void drawWiFiTab() {
@@ -161,6 +208,18 @@ void handleTouch() {
                 drawTabs();
                 drawTabContent();
             }
+        } else if (currentTab == TAB_MEDIA) {
+            // Check file list touch
+            int clickedIndex = (y - (tabHeight + 40)) / 20;
+            if (clickedIndex >= 0 && clickedIndex < fileCount && clickedIndex != selectedIndex) {
+                selectedIndex = clickedIndex;
+                selectedFile = fileList[selectedIndex];
+                redrawContent = true;
+                drawTabContent();
+            }
         }
+
+        // Debounce touch
+        vTaskDelay(pdMS_TO_TICKS(200));
     }
 }

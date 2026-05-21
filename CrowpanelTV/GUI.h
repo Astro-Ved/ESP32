@@ -13,6 +13,9 @@ extern TFT_eSPI tft;
 extern Tab currentTab;
 extern SemaphoreHandle_t tftMutex;
 
+// Global to store selected file
+extern String selectedFile;
+
 void initGUI();
 void drawTabs();
 void drawTabContent();
