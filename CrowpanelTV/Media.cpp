@@ -137,13 +137,13 @@ void initMedia() {
 void initAudio() {
     i2s_config_t i2s_config = {
         .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX | I2S_MODE_DAC_BUILT_IN),
-        .sample_rate = 44100, // standard sample rate, adjust as needed
+        .sample_rate = 44100 * 4, // 4x oversampling base
         .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
         .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
-        .communication_format = I2S_COMM_FORMAT_STAND_I2S,
+        .communication_format = I2S_COMM_FORMAT_STAND_MSB,
         .intr_alloc_flags = 0, // default interrupt priority
         .dma_buf_count = 8,
-        .dma_buf_len = 64,
+        .dma_buf_len = 1024,
         .use_apll = true,
         .tx_desc_auto_clear = true
     };
@@ -151,11 +151,96 @@ void initAudio() {
     i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
     i2s_set_pin(I2S_NUM_0, NULL); // NULL for internal DAC
 
-    // Enable I2S DAC channels
-    i2s_set_dac_mode(I2S_DAC_CHANNEL_BOTH_EN);
+    // Enable I2S DAC channel for Pin 26 (Left channel)
+    i2s_set_dac_mode(I2S_DAC_CHANNEL_LEFT_EN);
 
-    Serial.println("Audio Initialized (Internal DAC with Oversampling setup).");
+    Serial.println("Audio Initialized (Internal DAC pin 26 with Oversampling setup).");
 }
+
+void playMusic(const char *filename) {
+    File f = SD.open(filename, FILE_READ);
+    if (!f) return;
+
+    // Check WAV header
+    char header[44];
+    if (f.read((uint8_t*)header, 44) != 44) {
+        f.close();
+        return;
+    }
+
+    if (strncmp(header, "RIFF", 4) != 0 || strncmp(header + 8, "WAVE", 4) != 0) {
+        Serial.println("Not a valid WAV file");
+        f.close();
+        return;
+    }
+
+    uint16_t numChannels = *(uint16_t*)(header + 22);
+    uint32_t sampleRate = *(uint32_t*)(header + 24);
+    uint16_t bitsPerSample = *(uint16_t*)(header + 34);
+
+    Serial.printf("Playing WAV: %s (Channels: %d, Rate: %lu, Bits: %d)\n", filename, numChannels, sampleRate, bitsPerSample);
+
+    if (bitsPerSample != 16) {
+        Serial.println("Only 16-bit WAV files are supported");
+        f.close();
+        return;
+    }
+
+    // Reconfigure I2S sample rate if needed
+    i2s_set_sample_rates(I2S_NUM_0, sampleRate * 4); // 4x oversampling
+
+    const size_t readBufSamples = 512;
+    int16_t *readBuf = (int16_t*)heap_caps_malloc(readBufSamples * sizeof(int16_t), MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL);
+    int16_t *writeBuf = (int16_t*)heap_caps_malloc(readBufSamples * 8 * sizeof(int16_t), MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL);
+
+    if (!readBuf || !writeBuf) {
+        Serial.println("Failed to allocate audio buffers");
+        if (readBuf) free(readBuf);
+        if (writeBuf) free(writeBuf);
+        f.close();
+        return;
+    }
+
+    int16_t lastSample_l = 0; // State for interpolation across chunks
+
+    while (f.available() && currentTab == TAB_MEDIA) {
+        int bytesRead = f.read((uint8_t*)readBuf, readBufSamples * sizeof(int16_t));
+        if (bytesRead <= 0) break;
+
+        int numSamples = bytesRead / (numChannels * sizeof(int16_t));
+        size_t writeIdx = 0;
+
+        for (int i = 0; i < numSamples; i++) {
+            int16_t currentSample_l;
+
+            if (numChannels == 1) {
+                currentSample_l = readBuf[i];
+            } else {
+                currentSample_l = readBuf[i * 2]; // Take left channel
+            }
+
+            // 4x Oversampling using linear interpolation with previous sample
+            for (int j = 0; j < 4; j++) {
+                int16_t interp_l = lastSample_l + (currentSample_l - lastSample_l) * j / 4;
+
+                // I2S expects stereo data even if only left DAC is enabled. Structure: Left, Right
+                // Adding offset for built-in DAC to make it unsigned
+                writeBuf[writeIdx++] = interp_l + 0x8000;
+                writeBuf[writeIdx++] = interp_l + 0x8000; // duplicate to right channel
+            }
+
+            lastSample_l = currentSample_l;
+        }
+
+        size_t bytes_written;
+        i2s_write(I2S_NUM_0, writeBuf, writeIdx * sizeof(int16_t), &bytes_written, portMAX_DELAY);
+    }
+
+    free(readBuf);
+    free(writeBuf);
+    f.close();
+}
+
 
 void processMediaTask(void *pvParameters) {
     initMedia();
@@ -163,14 +248,13 @@ void processMediaTask(void *pvParameters) {
 
     while(1) {
         if (currentTab == TAB_MEDIA && sdMounted) {
-            // Check if user requested to play a file (hardcoded logic for demo)
-            // In a real GUI, this would be selected via touch
-            if (SD.exists("/video.mjpeg")) {
-                playMJPEG("/video.mjpeg");
-            } else if (SD.exists("/image.rgb")) {
-                playRGB("/image.rgb");
+            if (selectedFile != "") {
+                playMusic(selectedFile.c_str());
+                // After playing, clear the selection or just keep it and wait
+                // To avoid immediate replay loop, we could clear it, but maybe we just loop it
+                vTaskDelay(pdMS_TO_TICKS(1000));
             } else {
-                 vTaskDelay(pdMS_TO_TICKS(1000));
+                 vTaskDelay(pdMS_TO_TICKS(100));
             }
         } else {
             // Delay to allow other tasks to run

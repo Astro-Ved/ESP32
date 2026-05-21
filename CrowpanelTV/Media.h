@@ -11,6 +11,7 @@ extern JPEGDEC jpeg;
 
 void initMedia();
 void initAudio();
+void playMusic(const char *filename);
 void processMediaTask(void *pvParameters);
 
 int JPEGDraw(JPEGDRAW *pDraw);
