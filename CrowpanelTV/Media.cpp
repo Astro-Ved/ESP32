@@ -1,6 +1,7 @@
 #include "Media.h"
 #include "Config.h"
 #include "GUI.h" // For tft access
+#include "Game.h"
 #include "driver/i2s.h"
 
 SPIClass vspi(VSPI);
@@ -162,7 +163,9 @@ void processMediaTask(void *pvParameters) {
     initAudio();
 
     while(1) {
-        if (currentTab == TAB_MEDIA && sdMounted) {
+        if (currentTab == TAB_GAME) {
+            processGameTask();
+        } else if (currentTab == TAB_MEDIA && sdMounted) {
             // Check if user requested to play a file (hardcoded logic for demo)
             // In a real GUI, this would be selected via touch
             if (SD.exists("/video.mjpeg")) {
@@ -174,7 +177,7 @@ void processMediaTask(void *pvParameters) {
             }
         } else {
             // Delay to allow other tasks to run
-            vTaskDelay(pdMS_TO_TICKS(100));
+            vTaskDelay(pdMS_TO_TICKS(10));
         }
     }
 }

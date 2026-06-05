@@ -33,9 +33,9 @@ void drawTabs() {
     xSemaphoreTake(tftMutex, portMAX_DELAY);
     tft.fillRect(0, 0, tft.width(), tabHeight, TFT_DARKGREY);
 
-    int dynamicTabWidth = tft.width() / 3;
+    int dynamicTabWidth = tft.width() / 4;
 
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
         int x = i * dynamicTabWidth;
         if (i == currentTab) {
             tft.fillRect(x, 0, dynamicTabWidth, tabHeight, TFT_BLUE);
@@ -49,6 +49,7 @@ void drawTabs() {
         if (i == 0) tft.print("Media");
         else if (i == 1) tft.print("WiFi");
         else if (i == 2) tft.print("Config");
+        else if (i == 3) tft.print("Game");
     }
     xSemaphoreGive(tftMutex);
 }
@@ -64,6 +65,7 @@ void drawTabContent() {
         case TAB_MEDIA: drawMediaTab(); break;
         case TAB_WIFI: drawWiFiTab(); break;
         case TAB_CONFIG: drawConfigTab(); break;
+        case TAB_GAME: drawGameTab(); break;
     }
 
     redrawContent = false;
@@ -141,6 +143,16 @@ void drawConfigTab() {
     xSemaphoreGive(tftMutex);
 }
 
+void drawGameTab() {
+    xSemaphoreTake(tftMutex, portMAX_DELAY);
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    tft.setCursor(10, tabHeight + 20);
+    tft.println("Game Tab");
+    tft.setCursor(10, tabHeight + 40);
+    tft.println("Loading Jet Renderer...");
+    xSemaphoreGive(tftMutex);
+}
+
 void handleTouch() {
     uint16_t x, y;
     xSemaphoreTake(tftMutex, portMAX_DELAY);
@@ -151,11 +163,11 @@ void handleTouch() {
         // Map Y coordinate check for tabs (top area)
         if (y < tabHeight) {
             xSemaphoreTake(tftMutex, portMAX_DELAY);
-            int dynamicTabWidth = tft.width() / 3;
+            int dynamicTabWidth = tft.width() / 4;
             xSemaphoreGive(tftMutex);
 
             int newTab = x / dynamicTabWidth;
-            if (newTab >= 0 && newTab < 3 && newTab != currentTab) {
+            if (newTab >= 0 && newTab < 4 && newTab != currentTab) {
                 currentTab = (Tab)newTab;
                 redrawContent = true;
                 drawTabs();

@@ -6,7 +6,8 @@
 enum Tab {
     TAB_MEDIA,
     TAB_WIFI,
-    TAB_CONFIG
+    TAB_CONFIG,
+    TAB_GAME
 };
 
 extern TFT_eSPI tft;
@@ -22,5 +23,6 @@ void updateGUI();
 void drawMediaTab();
 void drawWiFiTab();
 void drawConfigTab();
+void drawGameTab();
 
 #endif // GUI_H
