@@ -2,6 +2,7 @@
 #include "Config.h"
 #include "GUI.h"
 #include "Media.h"
+#include "Game.h"
 
 // Task handles
 TaskHandle_t TaskCore0;
@@ -24,6 +25,9 @@ void setup() {
 
     // Print current configuration
     printConfig();
+
+    // Initialize Game engine and inputs
+    initGame();
 
     // Core 0 Task: Media Decoding and Audio
     xTaskCreatePinnedToCore(
